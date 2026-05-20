@@ -17,7 +17,12 @@ pub fn run(url: String, dir: Option<String>) -> Result<()> {
         .to_str()
         .ok_or_else(|| anyhow!("destination path is not valid utf-8: {}", dest.display()))?;
 
-    git::run(["clone", url.as_str(), dest_str])?;
+    let clone_url = match profile.host_alias.as_deref() {
+        Some(alias) => config::rewrite_ssh_host(&url, alias),
+        None => url.clone(),
+    };
+
+    git::run(["clone", clone_url.as_str(), dest_str])?;
     git::run_in(&dest, ["config", "user.name", profile.name.as_str()])?;
     git::run_in(&dest, ["config", "user.email", profile.email.as_str()])?;
 

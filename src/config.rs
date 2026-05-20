@@ -20,6 +20,12 @@ pub struct Profile {
     pub email: String,
     #[serde(default)]
     pub patterns: Vec<String>,
+    /// SSH host alias from `~/.ssh/config`. When set, git-jump rewrites the
+    /// host of SSH-form URLs (e.g. `github.com` → `github-personal`) so that
+    /// the right `IdentityFile` is selected by openssh. HTTPS URLs are
+    /// untouched.
+    #[serde(default)]
+    pub host_alias: Option<String>,
 }
 
 pub fn config_path() -> Result<PathBuf> {
@@ -76,6 +82,35 @@ impl Config {
     pub fn profile_keys(&self) -> Vec<String> {
         self.profiles.keys().cloned().collect()
     }
+}
+
+/// Rewrite the host of an SSH-form URL. HTTPS and other non-SSH URLs are
+/// returned unchanged so that profile rules can include HTTPS clones without
+/// silently rerouting them through an ssh host alias.
+pub fn rewrite_ssh_host(url: &str, new_host: &str) -> String {
+    if let Some(rest) = url.strip_prefix("ssh://") {
+        let slash = match rest.find('/') {
+            Some(i) => i,
+            None => return url.to_string(),
+        };
+        let (auth, tail) = rest.split_at(slash);
+        let user_prefix = match auth.rfind('@') {
+            Some(i) => &auth[..=i],
+            None => "",
+        };
+        return format!("ssh://{}{}{}", user_prefix, new_host, tail);
+    }
+    if !url.contains("://") {
+        if let Some(at) = url.find('@') {
+            let user = &url[..at];
+            let rest = &url[at + 1..];
+            if let Some(colon) = rest.find(':') {
+                let path = &rest[colon + 1..];
+                return format!("{}@{}:{}", user, new_host, path);
+            }
+        }
+    }
+    url.to_string()
 }
 
 fn build_globs(patterns: &[String]) -> Result<GlobSet> {
@@ -189,6 +224,30 @@ patterns = ["github.com/mft-energy/*"]
             cfg.resolve("git@gitlab.com:foo/bar.git")
                 .unwrap()
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn rewrite_scp_form() {
+        assert_eq!(
+            rewrite_ssh_host("git@github.com:foo/bar.git", "github-personal"),
+            "git@github-personal:foo/bar.git"
+        );
+    }
+
+    #[test]
+    fn rewrite_ssh_scheme() {
+        assert_eq!(
+            rewrite_ssh_host("ssh://git@github.com/foo/bar.git", "github-personal"),
+            "ssh://git@github-personal/foo/bar.git"
+        );
+    }
+
+    #[test]
+    fn rewrite_leaves_https_alone() {
+        assert_eq!(
+            rewrite_ssh_host("https://github.com/foo/bar.git", "github-personal"),
+            "https://github.com/foo/bar.git"
         );
     }
 

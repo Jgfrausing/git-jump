@@ -20,10 +20,16 @@ pub fn run(base: Option<String>) -> Result<()> {
         .ok_or_else(|| anyhow!("could not determine repo name from {}", root.display()))?
         .to_string();
 
-    let ssh_url = format!("git@{}:{}/{}.git", host, namespace, repo_name);
+    // Build a real-host URL first so profile patterns (e.g. `github.com/...`)
+    // match. Then apply the profile's `host_alias` (if any) to produce the URL
+    // actually handed to `git remote add origin`.
+    let lookup_url = format!("git@{}:{}/{}.git", host, namespace, repo_name);
 
     let cfg = Config::load()?;
-    let (profile_key, profile) = super::pick_profile(&cfg, &ssh_url)?;
+    let (profile_key, profile) = super::pick_profile(&cfg, &lookup_url)?;
+
+    let effective_host = profile.host_alias.as_deref().unwrap_or(host.as_str());
+    let ssh_url = format!("git@{}:{}/{}.git", effective_host, namespace, repo_name);
 
     if !is_repo_at(&root) {
         git::run_in(&root, ["init"])?;
