@@ -159,9 +159,9 @@ mod tests {
 
     #[test]
     fn parse_nested_namespace() {
-        let (h, n) = parse_namespace("dev.azure.com/mft-energy/some-project").unwrap();
+        let (h, n) = parse_namespace("dev.azure.com/acme/some-project").unwrap();
         assert_eq!(h, "dev.azure.com");
-        assert_eq!(n, "mft-energy/some-project");
+        assert_eq!(n, "acme/some-project");
     }
 
     #[test]

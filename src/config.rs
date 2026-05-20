@@ -191,7 +191,7 @@ mod tests {
 [profiles.work]
 name = "W"
 email = "w@x"
-patterns = ["github.com/mft-energy/*"]
+patterns = ["github.com/acme/*"]
 
 [profiles.personal]
 name = "P"
@@ -200,7 +200,7 @@ patterns = ["github.com/*"]
 "#;
         let cfg: Config = toml::from_str(raw).unwrap();
         let (key, _) = cfg
-            .resolve("git@github.com:mft-energy/repo.git")
+            .resolve("git@github.com:acme/repo.git")
             .unwrap()
             .unwrap();
         assert_eq!(key, "work");
@@ -217,7 +217,7 @@ patterns = ["github.com/*"]
 [profiles.work]
 name = "W"
 email = "w@x"
-patterns = ["github.com/mft-energy/*"]
+patterns = ["github.com/acme/*"]
 "#;
         let cfg: Config = toml::from_str(raw).unwrap();
         assert!(
@@ -225,6 +225,24 @@ patterns = ["github.com/mft-energy/*"]
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn resolve_azure_multi_segment_path() {
+        // Azure DevOps SSH URLs are 3 levels deep (`v3/org/project/repo`).
+        // Pattern must use `**`, not `*` — `*` doesn't cross `/`.
+        let raw = r#"
+[profiles.azure]
+name = "A"
+email = "a@x"
+patterns = ["ssh.dev.azure.com/v3/acme/**"]
+"#;
+        let cfg: Config = toml::from_str(raw).unwrap();
+        let (key, _) = cfg
+            .resolve("git@ssh.dev.azure.com:v3/acme/Project%20(One)/widget")
+            .unwrap()
+            .unwrap();
+        assert_eq!(key, "azure");
     }
 
     #[test]
@@ -259,7 +277,7 @@ default = "personal"
 [profiles.work]
 name = "W"
 email = "w@x"
-patterns = ["github.com/mft-energy/*"]
+patterns = ["github.com/acme/*"]
 
 [profiles.personal]
 name = "P"

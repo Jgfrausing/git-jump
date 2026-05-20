@@ -5,17 +5,24 @@ use std::fmt;
 
 use crate::git;
 
+#[derive(Clone, Copy, PartialEq)]
+enum Kind {
+    Local,
+    Remote,
+    Tag,
+}
+
 struct Entry {
     name: String,
-    remote_only: bool,
+    kind: Kind,
 }
 
 impl fmt::Display for Entry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.remote_only {
-            write!(f, "{}  · remote", self.name)
-        } else {
-            write!(f, "{}", self.name)
+        match self.kind {
+            Kind::Local => write!(f, "{}", self.name),
+            Kind::Remote => write!(f, "{}  · remote", self.name),
+            Kind::Tag => write!(f, "{}  · tag", self.name),
         }
     }
 }
@@ -39,19 +46,36 @@ pub fn run() -> Result<()> {
         .map(String::from)
         .collect();
 
+    let tags: Vec<String> = git::capture(["tag", "--list", "--sort=-version:refname"])?
+        .lines()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+
     let local_set: HashSet<&str> = locals.iter().map(String::as_str).collect();
 
-    let mut entries: Vec<Entry> = Vec::with_capacity(locals.len() + remotes_full.len());
+    let mut entries: Vec<Entry> =
+        Vec::with_capacity(locals.len() + remotes_full.len() + tags.len());
+
     for name in &locals {
         entries.push(Entry {
             name: name.clone(),
-            remote_only: false,
+            kind: Kind::Local,
         });
     }
 
     let mut seen_remote: HashSet<String> = HashSet::new();
     for full in &remotes_full {
-        let short = full.split_once('/').map(|(_, s)| s).unwrap_or(full.as_str());
+        // A real remote-tracking branch is `<remote>/<branch>`. `git branch -r
+        // --format=%(refname:short)` will sometimes also emit a bare remote
+        // name (e.g. `origin`) for `refs/remotes/<remote>/HEAD` depending on
+        // git's symref-shortening behavior — skip those, they aren't checkout
+        // targets.
+        let short = match full.split_once('/') {
+            Some((_, s)) if !s.is_empty() && s != "HEAD" => s,
+            _ => continue,
+        };
         if local_set.contains(short) {
             continue;
         }
@@ -60,12 +84,19 @@ pub fn run() -> Result<()> {
         }
         entries.push(Entry {
             name: short.to_string(),
-            remote_only: true,
+            kind: Kind::Remote,
+        });
+    }
+
+    for tag in tags {
+        entries.push(Entry {
+            name: tag,
+            kind: Kind::Tag,
         });
     }
 
     if entries.is_empty() {
-        bail!("no branches to choose from");
+        bail!("no branches or tags to choose from");
     }
 
     let chosen = match Select::new("checkout", entries).with_page_size(15).prompt() {
@@ -76,5 +107,10 @@ pub fn run() -> Result<()> {
         Err(e) => return Err(e.into()),
     };
 
-    git::run(["switch", &chosen.name])
+    match chosen.kind {
+        // `git switch` handles both local branches and DWIM-tracks remote-only.
+        Kind::Local | Kind::Remote => git::run(["switch", &chosen.name]),
+        // Tags can't be a branch tip — land detached.
+        Kind::Tag => git::run(["checkout", &chosen.name]),
+    }
 }

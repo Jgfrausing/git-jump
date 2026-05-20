@@ -265,7 +265,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "git-jump"
+name = "gj"
 version = "0.1.0"
 dependencies = [
  "anyhow",
