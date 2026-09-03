@@ -225,6 +225,10 @@ check "16 path in the file" eq "$(cat "$T/cd")" "$W/feat-a"
 
 # ---- extras -----------------------------------------------------------------
 cd "$R"
+out=$("$GJ" --help 2>/dev/null | head -1); rc=${PIPESTATUS[0]}
+check "x --help exits 0" eq "$rc" 0
+check "x --help prints usage" eq "$out" "gj: git, with one worktree per branch"
+same "help <topic> goes to git" help --all
 "$GJ" b 2>/dev/null; rc=$?
 check "x gj b without words exits 2" eq "$rc" 2
 "$GJ" b 'bad..name' 2>/dev/null; rc=$?
@@ -238,6 +242,9 @@ check "x wt root" eq "$out" "$R"
 out=$("$GJ" wt ls 2>/dev/null)
 check "x wt ls lists root" has "$out" "$R  main  · root"
 check "x wt ls lists a worktree" has "$out" "$W/feat-a  feat/a"
+out=$("$GJ" wt ls --tsv 2>/dev/null | head -1)
+check "x wt ls --tsv root first" eq "$out" "$(printf '%s\tmain' "$R")"
+check "x wt ls --tsv has a worktree line" has "$("$GJ" wt ls --tsv 2>/dev/null)" "$(printf '%s\tfeat/a' "$W/feat-a")"
 "$GJ" wt rm feat/c 2>/dev/null; rc=$?
 check "x wt rm refuses unmerged without -f" bash -c "[[ $rc == 1 && -e '$W/feat-c' ]]"
 "$GJ" wt rm feat/c -f 2>/dev/null; rc=$?

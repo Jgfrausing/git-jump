@@ -11,7 +11,44 @@ use std::io::IsTerminal;
 use std::path::Path;
 use wt::{Base, Moved};
 
+const HELP: &str = "\
+gj: git, with one worktree per branch
+
+The root directory stays on main. Every other branch lives in
+<root>/.worktrees/<slug>, and switching moves the shell there.
+Anything not listed here is passed to git unchanged, aliases included.
+
+  gj                          picker over branches and tags; Enter moves there
+  gj co <branch>              go to the branch's worktree, creating it if needed
+                              (also: checkout, switch; a sha, tag or path goes to git)
+  gj co <typo>                picker, filtered by <typo>
+  gj co -                     previous directory (needs the zsh wrapper)
+  gj b <words...>             new branch <words-with-dashes> off freshly synced main
+      --here                    base on the current worktree's HEAD instead
+      --no-sync                 skip the fetch
+  gj co -b <b> [<start>]      new branch; with <start> no sync (also: switch -c)
+  gj branch -d|-D <b>...      delete branch and its worktree
+  gj fapp | delete-gone       fetch, prune, ff main, drop gone branches + worktrees
+  gj up                       sync, then merge main into the current worktree
+  gj adopt                    root on a non-main branch: move it to a worktree
+  gj wt ls [--tsv]            worktrees, root first (--tsv: path<TAB>branch, for editors)
+  gj wt path <b>|root|main|prune|rm [<b>...] [-f]
+                              worktree helpers; rm with no names is a multi-select
+
+Config   git config gj.main <name>        main branch (default: origin/HEAD, main, master)
+         git config gj.worktrees false    opt out for this repo; commands go to git as is
+Exit     0 ok, 1 error, 2 usage, 4 refused (uncommitted changes), 130 cancelled
+
+Reports the directory to move to in $GJ_CD_FILE, or on stdout when unset.
+";
+
 fn main() {
+    // Rust starts with SIGPIPE ignored, and exec'd git would inherit that.
+    // Restore the default so `gj wt ls | head` and `gj log | head` both end
+    // quietly, as they do under a shell.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
     match run(&args) {
         Ok(Some(path)) => report(&path),
@@ -46,6 +83,10 @@ fn run(args: &[String]) -> Result<Moved> {
     }
     let a: Vec<&str> = args.iter().map(String::as_str).collect();
     match a[0] {
+        "--help" | "-h" | "help" if a.len() == 1 => {
+            print!("{HELP}");
+            Ok(None)
+        }
         "co" | "checkout" | "switch" => checkout(args, &a),
         "b" => {
             let repo = gate(args)?;
@@ -145,10 +186,11 @@ fn branch(args: &[String], a: &[&str]) -> Result<Moved> {
 }
 
 fn worktree_cmd(args: &[String], rest: &[&str]) -> Result<Moved> {
-    const HELP: &str = "usage: gj wt ls | path <branch> | root | main | prune | rm [<branch>...] [-f]";
+    const HELP: &str = "usage: gj wt ls [--tsv] | path <branch> | root | main | prune | rm [<branch>...] [-f]";
     let repo = gate(args)?;
     match rest {
         ["ls"] => wt::list(&repo).map(|_| None),
+        ["ls", "--tsv"] => wt::list_tsv(&repo).map(|_| None),
         ["path", b] => {
             let path = match repo.worktree_of(b)? {
                 Some(w) => w.path,

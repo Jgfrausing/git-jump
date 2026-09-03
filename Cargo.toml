@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 inquire = "0.9"
 anyhow = "1"
+libc = "0.2"

@@ -11,6 +11,8 @@ The repo directory stays on main. Every other branch is checked out under
 switching to a branch moves your shell into that directory. Deleting a branch
 removes its worktree too, so there is no stash dance around `checkout main`.
 
+[TUTORIAL.md](./TUTORIAL.md) walks through one branch's life with gj.
+
 ## Install
 
 ```sh
@@ -42,6 +44,7 @@ anything that does not match a row is `exec git <args>`.
 
 | You type | gj does |
 |---|---|
+| `gj --help`, `gj -h`, `gj help` | usage summary. `gj help <topic>` still goes to git |
 | `gj` | picker over branches and tags, main first, `· wt` on branches that have a worktree; Enter moves to that branch's worktree |
 | `gj co <b>`, `gj checkout <b>`, `gj switch <b>` | go to `<b>`'s worktree, creating it if needed. Only for exactly one positional that names a local or remote-only branch. A sha, tag, file path, `origin/main <paths>`, any flag or `--` passes through to git |
 | `gj co <typo>` | opens the picker filtered by `<typo>`, when `<typo>` is not a branch, not a rev and not a path, and there is a tty. Without a tty git's own error is returned |
@@ -52,7 +55,7 @@ anything that does not match a row is `exec git <args>`.
 | `gj fapp`, `gj delete-gone` | fetch and prune, ff-pull main in the root, remove branches whose upstream is gone together with their worktrees, `worktree prune` |
 | `gj up` | sync, then `git merge <main>` in the current worktree. Errors in the root ("already on main") |
 | `gj adopt` | root is on a non-main branch: move that branch to a worktree and put the root back on main |
-| `gj wt ls` | list worktrees with their branch |
+| `gj wt ls` | list worktrees with their branch. `--tsv` prints `path<TAB>branch` lines, root first, for editors and scripts |
 | `gj wt path <b>` | print the worktree path for `<b>` (existing, or where it would go) |
 | `gj wt root`, `gj wt main` | print the root directory / the main branch name |
 | `gj wt prune` | `git worktree prune` |

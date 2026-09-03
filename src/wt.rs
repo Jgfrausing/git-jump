@@ -344,6 +344,19 @@ pub fn adopt(repo: &Repo) -> Result<Moved> {
     Ok(Some(path))
 }
 
+/// One `path<TAB>branch` line per worktree, root first. For editors and
+/// scripts; the human form is `list`.
+pub fn list_tsv(repo: &Repo) -> Result<()> {
+    for wt in repo.worktrees()? {
+        println!(
+            "{}\t{}",
+            wt.path.display(),
+            wt.branch.as_deref().unwrap_or("(detached)")
+        );
+    }
+    Ok(())
+}
+
 pub fn list(repo: &Repo) -> Result<()> {
     for wt in repo.worktrees()? {
         let what = match &wt.branch {
