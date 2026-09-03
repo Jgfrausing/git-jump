@@ -1,78 +1,62 @@
 # CLAUDE.md
 
-Guidance for AI agents working in this repo. The user-facing project description
-is in [README.md](./README.md) — don't duplicate it here.
+Guidance for AI agents working in this repo. User-facing description is in
+[README.md](./README.md).
 
 ## Architectural rules
 
 ### Single git chokepoint
 
 `src/git.rs` is the **only** module that constructs `Command::new("git")`.
-Everything else calls `git::run`, `git::run_in`, `git::capture`,
-`git::capture_in`, or `git::silent_in`. This is non-negotiable: it is what
-makes the tool injection-safe (no shell, vector args). If you find yourself
-wanting to spawn git from another module, add a helper to `git.rs` instead.
+Everything else calls `git::run`, `git::capture`, or `git::in_repo`. This is
+what keeps the tool injection-safe (no shell, vector args). If you need git
+behavior that isn't exposed, add a helper to `git.rs` rather than spawning
+git from anywhere else.
 
-### URLs never go through a shell
+### Branches and tags are listed in fixed order
 
-Branch names, URLs, and namespaces are always passed as separate `args` entries
-to git. Never `format!` user input into a string that gets split by whitespace.
-The chokepoint rule above enforces this structurally.
+`main.rs::run` emits entries in this order:
 
-### Profile resolution is order-sensitive
+1. Local branches (kind `Local`)
+2. Remote-only branches (kind `Remote`) — de-duped against locals,
+   `<remote>/HEAD` symrefs filtered, refs without a `<remote>/<branch>`
+   structure dropped (git's symref-shortening can otherwise produce a bare
+   remote name like `origin`)
+3. Tags (kind `Tag`), newest version first
 
-`Config::profiles` is an `IndexMap`, not a `HashMap`. The order in
-`config.toml` is the matching order — first profile whose globs match wins.
-Tests in `src/config.rs` lock this in (see `resolve_first_match_wins`). Do
-not switch back to `HashMap`.
+If you change this order, the user-facing behavior changes — call it out.
 
-### `config_path()` is XDG, not platform
+### Action depends on kind
 
-We do **not** use `dirs::config_dir()` because on macOS it returns
-`~/Library/Application Support`. The current implementation honours
-`$XDG_CONFIG_HOME` and falls back to `~/.config`. Keep it that way.
+`Local` / `Remote` selections go through `git switch` (which DWIM-tracks
+remote-only branches). `Tag` selections go through `git checkout` (detached
+HEAD). Don't unify these — `git switch` rejects tags by design.
 
-### SSH host rewriting only on SSH URLs
+### `Esc` / `Ctrl-C` exits 130
 
-`config::rewrite_ssh_host` accepts `git@host:path` and `ssh://git@host/path`
-and leaves anything else (most importantly HTTPS) untouched. The reasoning:
-HTTPS uses credential helpers, not SSH keys, so silently rerouting through an
-`~/.ssh/config` alias would be wrong.
-
-## Adding a new subcommand
-
-1. Create `src/cmd/<name>.rs` exporting `pub fn run(...) -> anyhow::Result<()>`.
-2. Add `pub mod <name>;` to `src/cmd/mod.rs`.
-3. Add a variant to the `Command` enum in `src/main.rs` and a match arm in
-   `run()`.
-4. If the command needs to resolve a profile from a URL, call
-   `super::pick_profile(&cfg, &url)` — don't reimplement the resolve-or-prompt
-   dance.
+Cancellation handling for `inquire` matches the conventional SIGINT exit
+code. Don't swallow `OperationCanceled` / `OperationInterrupted` as errors.
 
 ## Style
 
-- Comments only where the **why** isn't obvious from the code. No "this
-  function does X" comments — the function name does that.
-- `anyhow::Result` everywhere user-visible. `bail!` for clean error messages.
-- Cancellation handling for `inquire`: `OperationCanceled` /
-  `OperationInterrupted` → `std::process::exit(130)`. Don't swallow them.
-- Tests live in a `#[cfg(test)] mod tests` block at the bottom of the same
-  file as the code under test. No separate `tests/` dir.
+- No comments except where the **why** isn't obvious.
+- `anyhow::Result` at the public boundary, `bail!` for clean error messages.
+- No tests at present — the logic is small enough to read in one pass, and
+  the branch-listing pipeline depends on a real git repo to be meaningful.
+  If you add tests, gate any that touch a real repo so they're skipped in CI.
 
 ## Verification
 
 ```sh
 cargo build           # must finish clean (no warnings)
-cargo test            # unit tests in config.rs, cmd/clone.rs, cmd/new_repo.rs
-cargo run -- --help   # sanity-check subcommand surface
+cargo run             # inside a git repo, should open the picker
 ```
 
-There are no integration tests that touch a real remote; if you add one,
-gate it behind a feature flag so CI never tries to clone something.
+## Out of scope
 
-## Out of scope (don't add without asking)
-
-- libgit2 / the `git2` crate — we shell out on purpose.
-- GPG / signing-key configuration.
-- Calling out to `gh` (or other host CLIs) to create remote-side repos.
-- Branch operations beyond `switch` (delete, rebase, worktree, …).
+The tool used to ship `clone` and `new-repo` subcommands that handled
+identity routing and SSH host aliases per-URL. That was removed in favour of
+`url.<alias>.insteadOf` rules in `~/.gitconfig`, which give the same routing
+to *every* git invocation (not just ones that go through this tool). If you
+find yourself reaching for "let's add a profile system" again, push back —
+gitconfig already does it.
