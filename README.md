@@ -45,7 +45,7 @@ anything that does not match a row is `exec git <args>`.
 | You type | gj does |
 |---|---|
 | `gj --help`, `gj -h`, `gj help` | usage summary. `gj help <topic>` still goes to git |
-| `gj` | picker over branches and tags, main first, `· wt` on branches that have a worktree; Enter moves to that branch's worktree |
+| `gj` | picker over branches and tags, main first. A local branch is marked `· root` when the root directory holds it and `· wt` when a linked worktree does, so main carries `· root` in the usual case and nothing when the root has been moved off it. Both markers appear together, and `· wt ×2` and up, when `worktree add --force` or `switch --ignore-other-worktrees` has put one branch in several trees. Enter moves to that branch's worktree |
 | `gj co <b>`, `gj checkout <b>`, `gj switch <b>` | go to `<b>`'s worktree, creating it if needed. Only for exactly one positional that names a local or remote-only branch. A sha, tag, file path, `origin/main <paths>`, any flag or `--` passes through to git |
 | `gj co <typo>` | opens the picker filtered by `<typo>`, when `<typo>` is not a branch, not a rev and not a path, and there is a tty. Without a tty git's own error is returned |
 | `gj co -`, `gj switch -`, `gj -` | `cd -`, done by the wrapper |

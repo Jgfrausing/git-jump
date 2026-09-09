@@ -246,7 +246,8 @@ fn pick(filter: Option<&str>) -> Result<Moved> {
         return Ok(None);
     }
     let repo = Repo::open()?;
-    let entries = picker::entries(Some(&repo.main), &repo.worktrees()?)?;
+    let worktrees = repo.worktrees()?;
+    let entries = picker::entries(Some(&repo), &worktrees)?;
     let chosen = picker::select(entries, filter)?;
     match chosen.kind {
         picker::Kind::Local | picker::Kind::Remote => wt::go(&repo, &chosen.name),

@@ -19,10 +19,23 @@ export GIT_PAGER=cat PAGER=cat GIT_EDITOR=true
 pass=0 fail=0
 ok()  { pass=$((pass + 1)); echo "ok   $1"; }
 nok() { fail=$((fail + 1)); echo "FAIL $1"; }
+skip() { echo "skip $1"; }
 check() { local d=$1; shift; if "$@"; then ok "$d"; else nok "$d"; fi; }
 eq() { [[ "$1" == "$2" ]] || { echo "     expected: $2"; echo "     got:      $1"; return 1; }; }
 has() { [[ "$1" == *"$2"* ]] || { echo "     wanted substring: $2"; echo "     got: $1"; return 1; }; }
 branch_of() { git -C "$1" symbolic-ref -q --short HEAD; }
+# Renders a command under a pty and cancels the prompt, so the picker's output
+# can be asserted. Escapes are stripped and \r split so `has` can match a row.
+# BSD script takes the command as argv, GNU script needs -c. Both tcgetattr
+# their own stdin, which is why the Escape arrives down a pipe: the suite's
+# inherited stdin may be a socket, and BSD script exits 1 on one.
+pty() {
+  if script --version >/dev/null 2>&1; then
+    printf '\033' | script -qec "$*" /dev/null 2>&1
+  else
+    printf '\033' | script -q /dev/null "$@" 2>&1
+  fi | tr '\r' '\n' | sed -e $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g'
+}
 wt_count() { git -C "$1" worktree list --porcelain | grep -c '^worktree '; }
 
 # ---- fixture: seed -> bare remote -> clone -------------------------------
@@ -222,6 +235,31 @@ cd "$R"
 out=$(GJ_CD_FILE="$T/cd" "$GJ" co feat/a 2>/dev/null)
 check "16 stdout empty with GJ_CD_FILE" eq "$out" ""
 check "16 path in the file" eq "$(cat "$T/cd")" "$W/feat-a"
+
+# ---- 17. picker markers -----------------------------------------------------
+cd "$R"
+out=$(pty "$GJ")
+if [[ "$out" != *"? checkout"* ]]; then
+  skip "17 picker markers (no pty: $(head -1 <<<"$out"))"
+else
+  check "17 root worktree marked" has "$out" "main  · root"
+  check "17 linked worktree marked" has "$out" "feat/a  · wt"
+  check "17 branch without a worktree is bare" bash -c "! grep -qE 'feat/b +·' <<<\"$out\""
+  out=$(cd "$T/repo3" && pty "$GJ")
+  check "17 root off main marked with its branch" has "$out" "pre  · root"
+  check "17 main unmarked when it has no worktree" bash -c "! grep -qE 'main +·' <<<\"$out\""
+  # git puts one branch in several trees with --force and
+  # --ignore-other-worktrees, so the markers are a tally, not one of three
+  # states.
+  git worktree add -q --force "$W/dup" main
+  out=$(pty "$GJ")
+  check "17 branch in root and a worktree shows both" has "$out" "main  · root  · wt"
+  git worktree add -q --force "$W/dup2" main
+  out=$(pty "$GJ")
+  check "17 several linked worktrees are counted" has "$out" "main  · root  · wt ×2"
+  git worktree remove --force "$W/dup"
+  git worktree remove --force "$W/dup2"
+fi
 
 # ---- extras -----------------------------------------------------------------
 cd "$R"
