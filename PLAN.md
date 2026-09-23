@@ -172,7 +172,7 @@ worktree in place). Report path.
   would fight). One function per row of the table above, each returning `Intercept(op)` or
   `PassThrough`. `report(path)` writes `GJ_CD_FILE` or stdout.
 - `Cargo.toml`: consider `inquire = "0.9"`.
-- `CLAUDE.md`: rewrite "Action depends on kind" and "Out of scope" for the new job ("git front
+- `AGENTS.md`: rewrite "Action depends on kind" and "Out of scope" for the new job ("git front
   end, branch = worktree, unknown args exec git"); extend the single-chokepoint rule to `repo.rs`
   and `wt.rs`; keep the fixed listing order rule with main first; document the `GJ_CD_FILE`
   contract, the pass-through rule and the exit codes.

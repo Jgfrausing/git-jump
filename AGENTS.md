@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 Guidance for AI agents working in this repo. User-facing description is in
 [README.md](./README.md).
